@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gizem'im</title>
+    <style>
+        body {
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #ffe6f2;
+            overflow: hidden;
+            font-family: 'Arial', cursive;
+        }
+        
+        .message {
+            position: relative;
+            z-index: 10;
+            text-align: center;
+            padding: 30px;
+            background-color: rgba(255, 255, 255, 0.85);
+            border-radius: 20px;
+            box-shadow: 0 0 20px rgba(255, 105, 180, 0.6);
+            max-width: 80%;
+            animation: heartbeat 1.5s infinite;
+        }
+        
+        h1 {
+            color: #ff1493;
+            margin-bottom: 15px;
+            font-size: 2.2em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        p {
+            color: #d23369;
+            font-size: 1.5em;
+            margin-top: 10px;
+        }
+        
+        .flower {
+            position: absolute;
+            font-size: 24px;
+            opacity: 0;
+            animation: bloom 3s forwards, float 8s infinite;
+            user-select: none;
+        }
+        
+        @keyframes bloom {
+            0% { transform: scale(0) rotate(0deg); opacity: 0; }
+            100% { transform: scale(1) rotate(360deg); opacity: 0.7; }
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-25px); }
+        }
+        
+        @keyframes heartbeat {
+            0% { transform: scale(1); }
+            25% { transform: scale(1.05); }
+            50% { transform: scale(1); }
+            75% { transform: scale(1.03); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <div class="message">
+        <h1>Gizem'im 💝</h1>
+        <p>Seni çok seviyorum!</p>
+        <p style="font-size: 1.8em;">🌹🌷🌸💮🏵️🌺</p>
+    </div>
+
+    <script>
+        const flowers = ['🌹', '🌸', '🌺', '🌷', '🌼', '🌻', '💐', '🏵️', '💮', '🥀'];
+        
+        function createFlower() {
+            const flower = document.createElement('div');
+            flower.className = 'flower';
+            flower.innerHTML = flowers[Math.floor(Math.random() * flowers.length)];
+            
+            // Rastgele renk (pembe tonları)
+            const colors = ['#ff69b4', '#ff1493', '#db7093', '#ff6b9d', '#fd5da8'];
+            flower.style.color = colors[Math.floor(Math.random() * colors.length)];
+            
+            // Rastgele pozisyon ve boyut
+            flower.style.left = Math.random() * 100 + 'vw';
+            flower.style.top = Math.random() * 100 + 'vh';
+            flower.style.fontSize = (20 + Math.random() * 30) + 'px';
+            
+            // Animasyon gecikmesi
+            flower.style.animationDelay = Math.random() * 3 + 's';
+            flower.style.animationDuration = (4 + Math.random() * 8) + 's';
+            
+            document.body.appendChild(flower);
+            
+            // 15 saniye sonra çiçeği sil
+            setTimeout(() => flower.remove(), 15000);
+        }
+        
+        // Sayfa yüklendiğinde 25 çiçek oluştur
+        window.onload = () => {
+            for (let i = 0; i < 25; i++) createFlower();
+            setInterval(createFlower, 800); // Her 0.8 saniyede yeni çiçek
+        };
+    </script>
+</body>
+</html>
