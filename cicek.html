@@ -179,10 +179,32 @@
             padding: 10px;
             border-radius: 20px;
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
         
         body.dark-mode .music-player {
             background: rgba(30, 30, 60, 0.8);
+        }
+        
+        .music-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .music-controls button {
+            background: #ff69b4;
+            border: none;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
     </style>
 </head>
@@ -204,16 +226,19 @@
         <p>❤️ Bunu okuyorsan bana sarıl! ❤️</p>
     </div>
 
-    <!-- YouTube Müzik Oynatıcı -->
+    <!-- Özel Müzik Oynatıcı -->
     <div class="music-player">
-        <iframe 
-            width="300" 
-            height="80" 
-            src="https://www.youtube.com/embed/3CdH2OZXq-A?autoplay=1&mute=0&controls=0&loop=1&playlist=3CdH2OZXq-A" 
-            frameborder="0" 
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-            allowfullscreen>
-        </iframe>
+        <audio id="bgMusic" loop>
+            <source src="https://github.com/tirtekeka/ds/raw/refs/heads/main/Banu%20Parlak%20-%20Narin%20Yarim.mp3" type="audio/mpeg">
+            Tarayıcınız audio elementini desteklemiyor.
+        </audio>
+        <div class="music-controls">
+            <button onclick="document.getElementById('bgMusic').play()">▶️</button>
+            <button onclick="document.getElementById('bgMusic').pause()">⏸️</button>
+            <button onclick="document.getElementById('bgMusic').volume += 0.1">🔊</button>
+            <button onclick="document.getElementById('bgMusic').volume -= 0.1">🔉</button>
+        </div>
+        <span>Banu Parlak - Narin Yarim</span>
     </div>
 
     <script>
@@ -240,6 +265,13 @@
                     document.getElementById('hiddenMessage').style.display = 'none';
                 }, 8000);
             }, 10000);
+            
+            // Müziği otomatik başlat (kullanıcı etkileşimi sonrası)
+            document.addEventListener('click', function() {
+                const music = document.getElementById('bgMusic');
+                music.volume = 0.5;
+                music.play();
+            }, { once: true });
         };
         
         function createFlower() {
