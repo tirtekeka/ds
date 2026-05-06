@@ -3,13 +3,10 @@
 #include <string.h>
 #include <stdint.h>
 
-// Precomputed password (OpenSSL olmadan)
-// Bu password_layer'lardan SHA512 hash olmadan türetildi
+
 static const char HARDCODED_PASSWORD[] = "eGXLGQF!GTFVPYXAKOG8WQ>KCVHWFSHMPZKETHPYBVMloDKN";
 
-// Şifre çok karmaşık, tahmin edilemez
-// Binary'de asla düz metin olarak bulunmaz
-// Parçalara bölünmüş, çok katmanlı şifrelenmiş
+
 
 static const uint8_t password_layer1[32] = {
     0x8F,0x3C,0x2A,0x7D,0x1E,0x4B,0x9F,0x6C,
