@@ -9,7 +9,6 @@ jobs:
   build:
     runs-on: windows-latest
     env:
-      # Node.js 20 uyarılarını susturmak için
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true 
 
     steps:
@@ -17,7 +16,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Libsodium Kutuphanesini Yukle (vcpkg)
-      # Statik kütüphane olarak yüklüyoruz ki EXE her yerde çalışsın
+      # x86-windows-static kullanarak her şeyi tek bir EXE'de topluyoruz
       run: vcpkg install libsodium:x86-windows-static
 
     - name: MSVC x86 (32-bit) Ortamini Ayarla
@@ -26,12 +25,11 @@ jobs:
         arch: x86
 
     - name: Derle (cl.exe)
-      # PowerShell engeline takılmamak için CMD kullanıyoruz
       shell: cmd
       run: |
         cl.exe /O2 /MT verify.cpp ^
-        /I "%GITHUB_WORKSPACE%\vcpkg_installed\x86-windows-static\include" ^
-        /link /LIBPATH:"%GITHUB_WORKSPACE%\vcpkg_installed\x86-windows-static\lib" ^
+        /I "%VCPKG_INSTALLATION_ROOT%\installed\x86-windows-static\include" ^
+        /link /LIBPATH:"%VCPKG_INSTALLATION_ROOT%\installed\x86-windows-static\lib" ^
         libsodium.lib user32.lib advapi32.lib ^
         /OUT:CrackMe.exe
 
