@@ -22,10 +22,11 @@ jobs:
         arch: x86
 
     - name: Derle (cl.exe)
+      shell: cmd  # PowerShell yerine CMD kullanarak ^ karakterini geçerli kılıyoruz
       run: |
         cl.exe /O2 /MT verify.cpp ^
-        /I "${{ github.workspace }}\vcpkg_installed\x86-windows-static\include" ^
-        /link /LIBPATH:"${{ github.workspace }}\vcpkg_installed\x86-windows-static\lib" ^
+        /I "%GITHUB_WORKSPACE%\vcpkg_installed\x86-windows-static\include" ^
+        /link /LIBPATH:"%GITHUB_WORKSPACE%\vcpkg_installed\x86-windows-static\lib" ^
         libsodium.lib user32.lib advapi32.lib ^
         /OUT:CrackMe.exe
 
