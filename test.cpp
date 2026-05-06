@@ -8,189 +8,178 @@
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "crypt32.lib")
 
-// ============ KRİTİK: Şifre BINARY'DE HİÇBİR YERDE YOK! ============
-// Şifre runtime'da çağrılan fonksiyonlardan HESAPLANIYOR
-// Ne encoded ne de encrypted - tamamen dinamik!
+// ---------------- Anti Debug Checks ----------------
 
-// ============ 1. ANTI-DEBUG (Önceki gibi) ============
-int check_peb_debug() {
+static int adb_check_peb_debug(void) {
     PPEB peb = (PPEB)__readfsdword(0x30);
-    if(peb->BeingDebugged) return 1;
-    if(peb->NtGlobalFlag & 0x70) return 1;
+    if (!peb) return 0;
+    if (peb->BeingDebugged) return 1;
+    if (peb->NtGlobalFlag & 0x70) return 1;
     PVOID heap = peb->ProcessHeap;
-    if(*(PDWORD)((PBYTE)heap + 0x18) & 0x00200000) return 1;
+    if (heap) {
+        DWORD flags = *(PDWORD)((PBYTE)heap + 0x18);
+        if (flags & 0x00200000) return 1;
+    }
     return 0;
 }
 
-int check_isdebuggerpresent() { return IsDebuggerPresent(); }
+static int adb_check_isdebuggerpresent(void) {
+    return IsDebuggerPresent() ? 1 : 0;
+}
 
-int check_remotedebugger() {
+static int adb_check_remotedebugger(void) {
     BOOL present = FALSE;
-    CheckRemoteDebuggerPresent(GetCurrentProcess(), &present);
-    return present;
+    if (CheckRemoteDebuggerPresent(GetCurrentProcess(), &present)) {
+        return present ? 1 : 0;
+    }
+    return 0;
 }
 
-int check_timing() {
-    uint64_t start, end;
+static int adb_check_timing(void) {
     unsigned int aux;
-    start = __rdtscp(&aux);
+    uint64_t start = __rdtscp(&aux);
     volatile int x = 0;
-    for(int i = 0; i < 10000; i++) x += i;
-    end = __rdtscp(&aux);
+    for (int i = 0; i < 10000; ++i) x += i;
+    uint64_t end = __rdtscp(&aux);
     uint64_t diff = end - start;
-    return (diff > 500000 || diff < 1000);
+    // thresholds kept from original; adjust if needed per CPU
+    if (diff > 500000 || diff < 1000) return 1;
+    return 0;
 }
 
-int check_seh() {
+static int adb_check_seh(void) {
     __try {
         __asm { int 0x2d }
     }
-    __except(EXCEPTION_EXECUTE_HANDLER) {
+    __except (EXCEPTION_EXECUTE_HANDLER) {
+        // If exception handler runs, assume normal environment
         return 0;
     }
+    // If no exception occurred, suspicious (original logic)
     return 1;
 }
 
-// ============ 2. ŞİFRE OLUŞTURMA (Runtime Computation) ============
-// Binary'de HİÇBİR string yok!
-// Şifre, sistem bilgilerinden + zaman + rastgele hesaplanır
-// Her çalıştırmada SAME password (deterministic)
+// Runner that executes all anti-debug checks and returns 1 if any detect debugging
+static int run_anti_debug_checks(void) {
+    typedef int (*adb_fn)(void);
+    adb_fn checks[] = {
+        adb_check_peb_debug,
+        adb_check_isdebuggerpresent,
+        adb_check_remotedebugger,
+        adb_check_timing,
+        adb_check_seh
+    };
+    const size_t n = sizeof(checks) / sizeof(checks[0]);
+    for (size_t i = 0; i < n; ++i) {
+        if (checks[i]()) return 1;
+    }
+    return 0;
+}
 
-void get_system_fingerprint(char *output, int max_len) {
-    // Get computer name
-    char comp_name[256];
-    DWORD size = sizeof(comp_name);
-    GetComputerNameA(comp_name, &size);
-    
-    // Get Windows directory
-    char win_dir[256];
+// ---------------- System Fingerprint and Password Generation ----------------
+
+static void get_system_fingerprint(char *output, int max_len) {
+    if (!output || max_len <= 1) return;
+
+    char comp_name[256] = {0};
+    DWORD comp_len = sizeof(comp_name);
+    GetComputerNameA(comp_name, &comp_len);
+
+    char win_dir[256] = {0};
     GetWindowsDirectoryA(win_dir, sizeof(win_dir));
-    
-    // Get volume serial number
-    DWORD serial;
+
+    DWORD serial = 0;
     GetVolumeInformationA("C:\\", NULL, 0, &serial, NULL, NULL, NULL, 0);
-    
-    // Get processor info
-    int cpu_info[4];
+
+    int cpu_info[4] = {0};
     __cpuid(cpu_info, 1);
-    
-    // Çok gizli bir sabit (binary'de var ama tek başına anlamsız)
+
     const char *secret_parts[] = {
         "X9kL", "2mQp", "7vRt", "4wYs",
         "1nZb", "8cDf", "3gHj", "6lKm"
     };
-    
-    // Combine everything and hash
+
     char combined[512];
-    snprintf(combined, sizeof(combined), "%s|%s|%d|%d|%s%s",
-             comp_name, win_dir, serial, cpu_info[0],
-             secret_parts[3], secret_parts[7]);
-    
-    // SHA-256
+    int written = _snprintf_s(combined, sizeof(combined), _TRUNCATE,
+                              "%s|%s|%u|%d|%s%s",
+                              comp_name, win_dir, serial, cpu_info[0],
+                              secret_parts[3], secret_parts[7]);
+
+    // Fallback if snprintf fails
+    if (written < 0) combined[0] = '\0';
+
+    // SHA-256 via CryptoAPI
+    HCRYPTPROV hProv = 0;
+    HCRYPTHASH hHash = 0;
     uint8_t hash[32];
-    HCRYPTPROV hProv;
-    HCRYPTHASH hHash;
-    DWORD hash_len = 32;
-    
-    CryptAcquireContextA(&hProv, NULL, NULL, PROV_RSA_AES, CRYPT_VERIFYCONTEXT);
-    CryptCreateHash(hProv, CALG_SHA_256, 0, 0, &hHash);
-    CryptHashData(hHash, (BYTE*)combined, strlen(combined), 0);
-    CryptGetHashParam(hHash, HP_HASHVAL, hash, &hash_len, 0);
-    
-    // Hash'i şifreye çevir (A-Z, a-z, 0-9, !@#$%^&*)
-    const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
-    int charset_len = sizeof(charset) - 1;
-    
-    for(int i = 0; i < 32 && i < max_len - 1; i++) {
-        output[i] = charset[hash[i] % charset_len];
+    DWORD hash_len = sizeof(hash);
+
+    BOOL ok = CryptAcquireContextA(&hProv, NULL, NULL, PROV_RSA_AES, CRYPT_VERIFYCONTEXT);
+    if (ok) {
+        ok = CryptCreateHash(hProv, CALG_SHA_256, 0, 0, &hHash);
     }
-    output[32] = '\0';
-    
-    CryptDestroyHash(hHash);
-    CryptReleaseContext(hProv, 0);
+    if (ok) {
+        ok = CryptHashData(hHash, (BYTE*)combined, (DWORD)strlen(combined), 0);
+    }
+    if (ok) {
+        ok = CryptGetHashParam(hHash, HP_HASHVAL, hash, &hash_len, 0);
+    }
+
+    const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+    int charset_len = (int)(sizeof(charset) - 1);
+
+    // If hashing failed, fall back to a deterministic but weaker method
+    if (!ok) {
+        // Simple fallback: mix some bytes from combined
+        for (int i = 0; i < 32 && i < max_len - 1; ++i) {
+            uint8_t b = (uint8_t)combined[i % (strlen(combined) ? strlen(combined) : 1)];
+            output[i] = charset[b % charset_len];
+        }
+        output[32] = '\0';
+    } else {
+        for (int i = 0; i < 32 && i < max_len - 1; ++i) {
+            output[i] = charset[hash[i] % charset_len];
+        }
+        output[32] = '\0';
+    }
+
+    if (hHash) CryptDestroyHash(hHash);
+    if (hProv) CryptReleaseContext(hProv, 0);
+
     SecureZeroMemory(combined, sizeof(combined));
     SecureZeroMemory(hash, sizeof(hash));
 }
 
-// ============ 3. ŞİFRE DOĞRULAMA (Zero-Knowledge) ============
-// Kullanıcının şifresiyle sistem fingerprint'ini karşılaştır
-// Ama fingerprint HİÇBİR YERDE SAKLANMAZ!
+// Constant time comparison
+static int constant_time_compare(const char *a, const char *b, size_t len) {
+    volatile unsigned int diff = 0;
+    for (size_t i = 0; i < len; ++i) {
+        diff |= (unsigned char)a[i] ^ (unsigned char)b[i];
+    }
+    return diff == 0;
+}
+
+// ---------------- Password Verification ----------------
 
 __declspec(noinline) int verify_password(const char *user_pass) {
-    // Anti-debug
-    if(check_peb_debug() || check_isdebuggerpresent() || 
-       check_remotedebugger() || check_timing() || check_seh()) {
-        return 0;
-    }
-    
-    // Generate correct password from system (ON THE FLY)
+    if (!user_pass) return 0;
+
+    // Run anti-debug checks first
+    if (run_anti_debug_checks()) return 0;
+
     char correct[33] = {0};
     get_system_fingerprint(correct, sizeof(correct));
-    
-    // Compare
-    size_t len = strlen(correct);
-    if(strlen(user_pass) != len) {
+
+    size_t correct_len = strnlen(correct, sizeof(correct));
+    size_t user_len = strnlen(user_pass, 256);
+
+    if (user_len != correct_len) {
         SecureZeroMemory(correct, sizeof(correct));
         return 0;
     }
-    
-    volatile int result = 0;
-    for(size_t i = 0; i < len; i++) {
-        result |= user_pass[i] ^ correct[i];
-    }
-    
+
+    int ok = constant_time_compare(user_pass, correct, correct_len);
+
     SecureZeroMemory(correct, sizeof(correct));
-    return result == 0;
-}
-
-// ============ 4. DEBUG KONTROLÜ İLE FLAG ============
-void show_flag() {
-    printf("\n");
-    printf("╔══════════════════════════════════════════════════════════╗\n");
-    printf("║                    ✓ ACCESS GRANTED ✓                    ║\n");
-    printf("╚══════════════════════════════════════════════════════════╝\n");
-    printf("\n");
-    printf("Congratulations! You found the correct password!\n");
-    printf("\n");
-    printf("FLAG: ZERO-KNOWLEDGE-PASSWORD-2025\n");
-    printf("\n");
-    printf("Note: The password changes per machine!\n");
-    printf("It's derived from your system fingerprint.\n");
-    printf("\n");
-}
-
-// ============ 5. MAIN ============
-int main() {
-    SetConsoleTitleA("CrackMe - Zero Knowledge Password");
-    
-    printf("\n");
-    printf("╔══════════════════════════════════════════════════════════╗\n");
-    printf("║     ZERO-KNOWLEDGE CRACKME - No Password in Binary!      ║\n");
-    printf("╚══════════════════════════════════════════════════════════╝\n");
-    printf("\n");
-    printf("[!] The password is NOT stored anywhere in this binary!\n");
-    printf("[!] It is derived from YOUR system fingerprint.\n");
-    printf("[!] Each computer has a DIFFERENT password.\n");
-    printf("\n");
-    
-    char password[256];
-    printf("Enter password: ");
-    fgets(password, sizeof(password), stdin);
-    password[strcspn(password, "\n")] = 0;
-    
-    if(verify_password(password)) {
-        show_flag();
-    } else {
-        printf("\n✗ Wrong password!\n");
-        printf("\nHint: Run this program on your own machine,\n");
-        printf("      the password is derived from your:\n");
-        printf("      - Computer name\n");
-        printf("      - Windows directory path\n");
-        printf("      - Volume serial number\n");
-        printf("      - CPU info\n");
-    }
-    
-    printf("\nPress Enter to exit...");
-    getchar();
-    return 0;
+    return ok;
 }
