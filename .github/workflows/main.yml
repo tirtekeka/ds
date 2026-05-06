@@ -1,4 +1,4 @@
-name: Build Zero-Knowledge CrackMe (x86)
+name: Build MSVC with Libsodium
 
 on:
   push:
@@ -10,21 +10,27 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - name: Kodu GitHub'dan Cek
+    - name: Kodu Cek
       uses: actions/checkout@v4
 
-    - name: MSVC 32-bit (x86) Ayarla
+    - name: Libsodium Yukle (vcpkg)
+      run: vcpkg install libsodium:x86-windows-static
+
+    - name: MSVC x86 Ortamini Ayarla
       uses: ilammy/msvc-dev-cmd@v1
       with:
-        arch: x86 # __asm bloklari icin 32-bit zorunlu!
+        arch: x86
 
-    - name: EXE Olarak Derle
-      # CryptoAPI kütüphanelerini (advapi32 ve crypt32) linkliyoruz
+    - name: Derle (cl.exe)
       run: |
-        cl.exe /O2 /MT test.cpp /Fe:ZeroKnowledgeCrackMe.exe /link /SUBSYSTEM:CONSOLE advapi32.lib crypt32.lib user32.lib
+        cl.exe /O2 /MT verify.cpp ^
+        /I "${{ github.workspace }}\vcpkg_installed\x86-windows-static\include" ^
+        /link /LIBPATH:"${{ github.workspace }}\vcpkg_installed\x86-windows-static\lib" ^
+        libsodium.lib user32.lib advapi32.lib ^
+        /OUT:CrackMe.exe
 
-    - name: Dosyayi Yukle
+    - name: EXE Dosyasini Yukle
       uses: actions/upload-artifact@v4
       with:
-        name: CrackMe-Binary
-        path: ZeroKnowledgeCrackMe.exe
+        name: CrackMe-Build
+        path: CrackMe.exe
