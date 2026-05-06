@@ -8,21 +8,26 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      # Node.js 20 uyarılarını susturmak için
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true 
 
     steps:
-    - name: Kodu Cek
+    - name: Kodu GitHub'dan Cek
       uses: actions/checkout@v4
 
-    - name: Libsodium Yukle (vcpkg)
+    - name: Libsodium Kutuphanesini Yukle (vcpkg)
+      # Statik kütüphane olarak yüklüyoruz ki EXE her yerde çalışsın
       run: vcpkg install libsodium:x86-windows-static
 
-    - name: MSVC x86 Ortamini Ayarla
+    - name: MSVC x86 (32-bit) Ortamini Ayarla
       uses: ilammy/msvc-dev-cmd@v1
       with:
         arch: x86
 
     - name: Derle (cl.exe)
-      shell: cmd  # PowerShell yerine CMD kullanarak ^ karakterini geçerli kılıyoruz
+      # PowerShell engeline takılmamak için CMD kullanıyoruz
+      shell: cmd
       run: |
         cl.exe /O2 /MT verify.cpp ^
         /I "%GITHUB_WORKSPACE%\vcpkg_installed\x86-windows-static\include" ^
@@ -30,8 +35,9 @@ jobs:
         libsodium.lib user32.lib advapi32.lib ^
         /OUT:CrackMe.exe
 
-    - name: EXE Dosyasini Yukle
+    - name: EXE Dosyasini Artifact Olarak Yukle
+      if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: CrackMe-Build
+        name: CrackMe-Build-Sonucu
         path: CrackMe.exe
