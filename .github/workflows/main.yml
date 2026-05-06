@@ -1,4 +1,4 @@
-name: Build My CrackMe
+name: Build Zero-Knowledge CrackMe (x86)
 
 on:
   push:
@@ -10,15 +10,21 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - name: Kodu Cek
+    - name: Kodu GitHub'dan Cek
       uses: actions/checkout@v4
 
-    - name: EXE Olarak Derle
-      # Dosya adın test.cpp olduğu için bu komutu kullanıyoruz
-      run: g++ test.cpp -o CrackMe.exe
+    - name: MSVC 32-bit (x86) Ayarla
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x86 # __asm bloklari icin 32-bit zorunlu!
 
-    - name: Dosyayi Paketle ve Sun
+    - name: EXE Olarak Derle
+      # CryptoAPI kütüphanelerini (advapi32 ve crypt32) linkliyoruz
+      run: |
+        cl.exe /O2 /MT test.cpp /Fe:ZeroKnowledgeCrackMe.exe /link /SUBSYSTEM:CONSOLE advapi32.lib crypt32.lib user32.lib
+
+    - name: Dosyayi Yukle
       uses: actions/upload-artifact@v4
       with:
-        name: CrackMe-Programi
-        path: CrackMe.exe
+        name: CrackMe-Binary
+        path: ZeroKnowledgeCrackMe.exe
