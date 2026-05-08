@@ -1,38 +1,29 @@
-name: Build Verify Windows x86
+name: Build jithook DLL
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-
-env:
-  # 2026 Node.js 24 zorunluluğu için
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
-  build-windows:
-    runs-on: windows-2025
+  build:
+    runs-on: windows-latest
+
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup vcpkg (x86)
-        run: |
-          vcpkg install libsodium:x86-windows-static
-
-      - name: Setup MSVC (x86)
+      - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x86
 
-      - name: Compile (MSVC x86 EXE)
-        shell: cmd
+      - name: Build DLL
         run: |
-          cl.exe /O2 /MT /EHsc verify.cpp /I %VCPKG_INSTALLATION_ROOT%\installed\x86-windows-static\include /link /LIBPATH:%VCPKG_INSTALLATION_ROOT%\installed\x86-windows-static\lib libsodium.lib user32.lib advapi32.lib /OUT:verify_win_x86.exe
+          cl.exe /LD /O2 /EHsc /Fe:jithook.dll jithook.cpp /link /MACHINE:X86 kernel32.lib
 
-      - name: Upload Artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: verify-windows-x86
-          path: verify_win_x86.exe
+          name: jithook-dll
+          path: jithook.dll
