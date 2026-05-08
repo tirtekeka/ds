@@ -18,18 +18,14 @@ typedef int(__stdcall* compileMethod_t)(
 compileMethod_t orig_compileMethod = nullptr;
 FILE* g_log = nullptr;
 
-// 32-bit detour: E9 xx xx xx xx = 5 byte relative jmp
 bool WriteDetour32(void* target, void* hook, uint8_t* savedBytes) {
     DWORD old;
     if (!VirtualProtect(target, 5, PAGE_EXECUTE_READWRITE, &old))
         return false;
-
     memcpy(savedBytes, target, 5);
-
     uint8_t* t = (uint8_t*)target;
-    t[0] = 0xE9; // JMP rel32
+    t[0] = 0xE9;
     *(int32_t*)(t + 1) = (int32_t)((uint8_t*)hook - t - 5);
-
     VirtualProtect(target, 5, old, &old);
     return true;
 }
@@ -38,14 +34,32 @@ int __stdcall hk_compileMethod(
     void* thisptr, void* comp, CORINFO_METHOD_INFO* info,
     unsigned flags, uint8_t** nativeEntry, uint32_t* nativeSizeOfCode)
 {
-    int ret = orig_compileMethod(thisptr, comp, info, flags, nativeEntry, nativeSizeOfCode);
+    int ret = 0;
 
-    if (g_log && info && info->ILCode && info->ILCodeSize > 0) {
-        fprintf(g_log, "METHOD 0x%p SIZE %u\n", info->ftn, info->ILCodeSize);
-        fwrite(info->ILCode, 1, info->ILCodeSize, g_log);
-        fprintf(g_log, "\n---\n");
-        fflush(g_log);
+    __try {
+        ret = orig_compileMethod(thisptr, comp, info, flags, nativeEntry, nativeSizeOfCode);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        if (g_log) {
+            fprintf(g_log, "EXCEPTION in orig_compileMethod\n");
+            fflush(g_log);
+        }
+        return -1;
     }
+
+    __try {
+        if (g_log && info && info->ILCode && info->ILCodeSize > 0) {
+            fprintf(g_log, "METHOD 0x%p SIZE %u\n", info->ftn, info->ILCodeSize);
+            fwrite(info->ILCode, 1, info->ILCodeSize, g_log);
+            fprintf(g_log, "\n---\n");
+            fflush(g_log);
+        }
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        if (g_log) {
+            fprintf(g_log, "EXCEPTION reading IL\n");
+            fflush(g_log);
+        }
+    }
+
     return ret;
 }
 
@@ -55,7 +69,7 @@ void DoHook() {
 
     HMODULE hJit = nullptr;
     int tries = 0;
-    while (!hJit && tries++ < 100) {
+    while (!hJit && tries++ < 200) {
         hJit = GetModuleHandleA("clrjit.dll");
         Sleep(100);
     }
@@ -79,16 +93,21 @@ void DoHook() {
         return;
     }
 
-    // 32-bit: pointer 4 byte
     void** vtable = *(void***)pJit;
     void* compileMethodPtr = vtable[0];
 
-    fprintf(g_log, "clrjit base: %p\n", hJit);
-    fprintf(g_log, "pJit: %p\n", pJit);
+    fprintf(g_log, "clrjit base  : %p\n", hJit);
+    fprintf(g_log, "pJit         : %p\n", pJit);
     fprintf(g_log, "compileMethod: %p\n", compileMethodPtr);
+    fprintf(g_log, "savedBytes before detour: %02X %02X %02X %02X %02X\n",
+        ((uint8_t*)compileMethodPtr)[0],
+        ((uint8_t*)compileMethodPtr)[1],
+        ((uint8_t*)compileMethodPtr)[2],
+        ((uint8_t*)compileMethodPtr)[3],
+        ((uint8_t*)compileMethodPtr)[4]);
     fflush(g_log);
 
-    // Trampoline alloc
+    // Trampolin: 5 saved byte + JMP geri
     uint8_t* tramp = (uint8_t*)VirtualAlloc(nullptr, 32,
         MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
     if (!tramp) {
@@ -98,7 +117,6 @@ void DoHook() {
     }
 
     uint8_t savedBytes[5];
-
     if (!WriteDetour32(compileMethodPtr, (void*)hk_compileMethod, savedBytes)) {
         fprintf(g_log, "WriteDetour32 failed\n");
         fflush(g_log);
@@ -106,11 +124,11 @@ void DoHook() {
         return;
     }
 
-    // Trampoline: saved 5 byte + jmp back to target+5
+    // Trampolin yaz: saved 5 byte + JMP compileMethodPtr+5
     memcpy(tramp, savedBytes, 5);
-    tramp[5] = 0xE9; // JMP rel32
+    tramp[5] = 0xE9;
     *(int32_t*)(tramp + 6) = (int32_t)(
-        (uint8_t*)compileMethodPtr + 5 - (tramp + 5) - 5
+        (uint8_t*)compileMethodPtr + 5 - (tramp + 10)
     );
 
     orig_compileMethod = (compileMethod_t)tramp;
