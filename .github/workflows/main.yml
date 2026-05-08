@@ -1,10 +1,14 @@
-name: Build Password Checker
+name: Build Verify App
 
 on:
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+
+env:
+  # Node.js 24 zorunluluğu için (2026 uyumluluğu)
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-linux:
@@ -13,23 +17,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install libsodium
         run: |
           sudo apt-get update
           sudo apt-get install -y libsodium-dev build-essential
 
-      - name: Compile (GCC)
+      - name: Compile (G++)
         run: |
-          gcc main.c -o checker_linux -lsodium
+          g++ verify.cpp -o verify_linux -lsodium
 
       - name: Upload Linux Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: checker-linux
-          path: checker_linux
+          name: verify-linux
+          path: verify_linux
 
   build-windows:
-    runs-on: windows-latest
+    runs-on: windows-2025
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -38,16 +42,16 @@ jobs:
         run: |
           vcpkg install libsodium:x64-windows-static
 
-      - name: Setup MSVC
-        uses: microsoft/setup-msbuild@v2
+      - name: Setup MSVC Developer Command Prompt
+        uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Compile (MSVC)
+      - name: Compile (MSVC C++)
         shell: cmd
         run: |
-          cl.exe /O2 /MT main.c /I %VCPKG_INSTALLATION_ROOT%\installed\x64-windows-static\include /link /LIBPATH:%VCPKG_INSTALLATION_ROOT%\installed\x64-windows-static\lib libsodium.lib user32.lib advapi32.lib /OUT:checker_win.exe
+          cl.exe /O2 /MT /EHsc verify.cpp /I %VCPKG_INSTALLATION_ROOT%\installed\x64-windows-static\include /link /LIBPATH:%VCPKG_INSTALLATION_ROOT%\installed\x64-windows-static\lib libsodium.lib user32.lib advapi32.lib /OUT:verify_win.exe
 
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: checker-windows
-          path: checker_win.exe
+          name: verify-windows
+          path: verify_win.exe
