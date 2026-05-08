@@ -1,41 +1,53 @@
-name: Build MSVC with Libsodium
+name: Build Password Checker
 
 on:
   push:
     branches: [ "main" ]
-  workflow_dispatch:
+  pull_request:
+    branches: [ "main" ]
 
 jobs:
-  build:
-    runs-on: windows-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true 
-
+  build-linux:
+    runs-on: ubuntu-latest
     steps:
-    - name: Kodu GitHub'dan Cek
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Libsodium Kutuphanesini Yukle (vcpkg)
-      # x86-windows-static kullanarak her şeyi tek bir EXE'de topluyoruz
-      run: vcpkg install libsodium:x86-windows-static
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsodium-dev build-essential
 
-    - name: MSVC x86 (32-bit) Ortamini Ayarla
-      uses: ilammy/msvc-dev-cmd@v1
-      with:
-        arch: x86
+      - name: Compile (GCC)
+        run: |
+          gcc main.c -o checker_linux -lsodium
 
-    - name: Derle (cl.exe)
-      shell: cmd
-      run: |
-        cl.exe /O2 /MT verify.cpp ^
-        /I "%VCPKG_INSTALLATION_ROOT%\installed\x86-windows-static\include" ^
-        /link /LIBPATH:"%VCPKG_INSTALLATION_ROOT%\installed\x86-windows-static\lib" ^
-        libsodium.lib user32.lib advapi32.lib ^
-        /OUT:CrackMe.exe
+      - name: Upload Linux Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: checker-linux
+          path: checker_linux
 
-    - name: EXE Dosyasini Artifact Olarak Yukle
-      if: success()
-      uses: actions/upload-artifact@v4
-      with:
-        name: CrackMe-Build-Sonucu
-        path: CrackMe.exe
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup vcpkg
+        run: |
+          vcpkg install libsodium:x64-windows-static
+
+      - name: Setup MSVC
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Compile (MSVC)
+        shell: cmd
+        run: |
+          cl.exe /O2 /MT main.c /I %VCPKG_INSTALLATION_ROOT%\installed\x64-windows-static\include /link /LIBPATH:%VCPKG_INSTALLATION_ROOT%\installed\x64-windows-static\lib libsodium.lib user32.lib advapi32.lib /OUT:checker_win.exe
+
+      - name: Upload Windows Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: checker-windows
+          path: checker_win.exe
