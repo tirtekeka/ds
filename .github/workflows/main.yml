@@ -1,29 +1,37 @@
-name: Build jithook DLL
+name: Build JIT Hook DLL (x64)
 
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  # 2026 Node.js 24 uyumluluğu
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
-    runs-on: windows-latest
-
+    runs-on: windows-2025
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup MSVC
+      - name: Setup MSVC (x64)
         uses: ilammy/msvc-dev-cmd@v1
         with:
-          arch: x86
+          arch: x64
 
-      - name: Build DLL
+      - name: Compile JIT Hook (DLL)
+        shell: cmd
+        # /LD: DLL oluşturur
+        # /MT: Statik runtime (VCRUNTIME140.dll gerektirmez)
+        # /O2: Hız optimizasyonu
         run: |
-          cl.exe /LD /O2 /EHsc /Fe:jithook.dll jithook.cpp /link /MACHINE:X86 kernel32.lib
+          cl.exe /O2 /LD /MT /EHsc jithook.cpp /link /OUT:jithook.dll
 
-      - name: Upload artifact
+      - name: Upload DLL Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: jithook-dll
+          name: jithook-x64
           path: jithook.dll
